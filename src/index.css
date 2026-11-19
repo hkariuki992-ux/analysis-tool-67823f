@@ -1,0 +1,208 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #070b14;
+  --color-ink-2: #0a1120;
+  --color-panel: #0d1526;
+  --color-panel-2: #111b30;
+  --color-line: #1b2942;
+  --color-line-2: #26385a;
+  --color-scope: #5cb8e6;
+  --color-scope-dim: #2f6d94;
+  --color-phosphor: #a8e4fb;
+  --color-amber: #e0a84e;
+  --color-hit: #55c79c;
+  --color-miss: #e2706d;
+  --color-mute: #7c8aa6;
+  --color-text: #dde6f4;
+
+  --font-display: "Chakra Petch", ui-sans-serif, sans-serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+html,
+body {
+  background: var(--color-ink);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  min-height: 100vh;
+  background-image:
+    radial-gradient(1200px 600px at 78% -10%, rgba(92, 184, 230, 0.12), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(47, 109, 148, 0.14), transparent 60%),
+    linear-gradient(rgba(92, 184, 230, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(92, 184, 230, 0.035) 1px, transparent 1px);
+  background-size: auto, auto, 32px 32px, 32px 32px;
+  background-attachment: fixed;
+}
+
+/* Fixed grain overlay (non-interactive) */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@layer components {
+  .panel {
+    position: relative;
+    background: linear-gradient(180deg, rgba(17, 27, 48, 0.92), rgba(12, 20, 36, 0.92));
+    border: 1px solid var(--color-line);
+    border-radius: 14px;
+    box-shadow:
+      0 1px 0 rgba(168, 228, 251, 0.04) inset,
+      0 20px 40px -24px rgba(0, 0, 0, 0.6);
+  }
+
+  /* corner ticks, like a scope bezel */
+  .panel::before {
+    content: "";
+    position: absolute;
+    inset: 6px;
+    pointer-events: none;
+    border-radius: 10px;
+    background:
+      linear-gradient(var(--color-scope-dim), var(--color-scope-dim)) top left / 10px 1px no-repeat,
+      linear-gradient(var(--color-scope-dim), var(--color-scope-dim)) top left / 1px 10px no-repeat,
+      linear-gradient(var(--color-scope-dim), var(--color-scope-dim)) bottom right / 10px 1px no-repeat,
+      linear-gradient(var(--color-scope-dim), var(--color-scope-dim)) bottom right / 1px 10px no-repeat;
+    opacity: 0.7;
+  }
+
+  .label {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-size: 0.68rem;
+    color: var(--color-mute);
+  }
+
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .btn-primary {
+    font-family: var(--font-display);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: linear-gradient(180deg, #6cc3ee, #3f97c6);
+    color: #061423;
+    border-radius: 10px;
+    box-shadow:
+      0 0 0 1px rgba(168, 228, 251, 0.35) inset,
+      0 10px 24px -12px rgba(92, 184, 230, 0.7);
+    transition:
+      transform 0.12s ease,
+      filter 0.15s ease;
+  }
+  .btn-primary:hover {
+    filter: brightness(1.08);
+  }
+  .btn-primary:active {
+    transform: translateY(1px) scale(0.99);
+  }
+  .btn-primary:disabled {
+    filter: grayscale(0.7) brightness(0.7);
+    cursor: not-allowed;
+  }
+
+  .btn-ghost {
+    border: 1px solid var(--color-line-2);
+    border-radius: 10px;
+    color: var(--color-text);
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease;
+  }
+  .btn-ghost:hover {
+    background: rgba(92, 184, 230, 0.08);
+    border-color: var(--color-scope-dim);
+  }
+
+  .btn-primary.is-warn {
+    background: linear-gradient(180deg, #eab866, #c58a2e);
+    box-shadow:
+      0 0 0 1px rgba(255, 226, 170, 0.35) inset,
+      0 10px 24px -12px rgba(224, 168, 78, 0.7);
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-scope);
+  outline-offset: 2px;
+}
+
+@keyframes sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.radar-sweep {
+  transform-origin: 50% 50%;
+  animation: sweep 3.2s linear infinite;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+.pulse-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise-in {
+  animation: rise-in 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+@keyframes flash {
+  from {
+    background: rgba(168, 228, 251, 0.18);
+  }
+  to {
+    background: transparent;
+  }
+}
+.tick-flash {
+  animation: flash 0.6s ease-out;
+}
+
+@keyframes ticker {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radar-sweep,
+  .pulse-dot,
+  .rise-in,
+  .tick-flash {
+    animation: none !important;
+  }
+}

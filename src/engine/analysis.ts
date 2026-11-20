@@ -72,7 +72,7 @@ function gaussianFilter(digits: number[]): number[] {
   }
 
   const alpha = 20;
-  return acc.map((a) => (a + alpha * 0.1) / (total + alpha);
+  return acc.map((a) => (a + alpha * 0.1) / (total + alpha));
 }
 
 /** Poisson counts over the most recent 300 observations. */
@@ -82,15 +82,19 @@ function poissonModel(digits: number[]) {
   const lambda = Math.max(W / 10, 1e-9);
   const counts = new Array(10).fill(0);
 
-  for (let i = n - W; i < n; i++) counts[digits[i]]++;
+  for (let i = n - W; i < n; i++) {
+    counts[digits[i]]++;
+  }
 
   const z = counts.map((k) => (k - lambda) / Math.sqrt(lambda));
+
   const tail = counts.map((k) => {
     const lower = poissonCdf(k, lambda);
     return Math.min(1, Math.min(lower, 1 - poissonCdf(k - 1, lambda)) * 2);
   });
 
   const gaps = new Array(10).fill(n);
+
   for (let d = 0; d < 10; d++) {
     for (let i = n - 1; i >= 0; i--) {
       if (digits[i] === d) {
@@ -122,9 +126,13 @@ function markovModel(digits: number[], k: number): number[] {
 
   for (let step = 0; step < k; step++) {
     const next = new Array(10).fill(0);
+
     for (let i = 0; i < 10; i++) {
-      for (let j = 0; j < 10; j++) next[j] += v[i] * M[i][j];
+      for (let j = 0; j < 10; j++) {
+        next[j] += v[i] * M[i][j];
+      }
     }
+
     v = next;
   }
 
@@ -146,6 +154,7 @@ function digitForecast(digits: number[], duration: number) {
   return { gaussian, pois, markov, distribution };
 }
 
+/** Rise/Fall estimate including ties in the outcome probabilities. */
 function riseFallModel(quotes: number[], k: number) {
   const n = quotes.length;
   let rises = 0;
@@ -164,13 +173,14 @@ function riseFallModel(quotes: number[], k: number) {
   const tieRate = ties / windows;
   const nonTie = empirical + empiricalFall;
 
-  // Smoothed transition probabilities for tick direction.
+  // Smoothed transitions between tick directions.
   let uu = 1, ud = 1, du = 1, dd = 1;
   let last = 0;
 
   for (let i = 2; i < n; i++) {
     const a = Math.sign(quotes[i - 1] - quotes[i - 2]);
     const b = Math.sign(quotes[i] - quotes[i - 1]);
+
     if (!a || !b) continue;
 
     if (a > 0 && b > 0) uu++;
@@ -183,7 +193,11 @@ function riseFallModel(quotes: number[], k: number) {
     last = Math.sign(quotes[i] - quotes[i - 1]);
   }
 
-  const pUp = { up: uu / (uu + ud), down: du / (du + dd) };
+  const pUp = {
+    up: uu / (uu + ud),
+    down: du / (du + dd),
+  };
+
   let states = new Map<string, number>([[`${last >= 0 ? 1 : -1}|0`, 1]]);
 
   for (let s = 0; s < k; s++) {
@@ -208,34 +222,45 @@ function riseFallModel(quotes: number[], k: number) {
 
   for (const [key, p] of states) {
     const net = Number(key.split("|")[1]);
+
     if (net > 0) markovRise += p;
     else if (net < 0) markovFall += p;
   }
 
-  // Smooth momentum on recent quotes.
+  // Smooth momentum using the most recent 60 quotes.
   const recent = quotes.slice(-60);
   const sigma = 4;
 
   const smooth = recent.map((_, i) => {
-    let s = 0, w = 0;
-    for (let j = Math.max(0, i - 12); j <= Math.min(recent.length - 1, i + 12); j++) {
+    let s = 0;
+    let w = 0;
+
+    for (
+      let j = Math.max(0, i - 12);
+      j <= Math.min(recent.length - 1, i + 12);
+      j++
+    ) {
       const g = Math.exp(-((i - j) ** 2) / (2 * sigma * sigma));
       s += g * recent[j];
       w += g;
     }
+
     return s / Math.max(w, 1e-12);
   });
 
   const inc = recent.slice(1).map((q, i) => q - recent[i]);
-  const sd = Math.sqrt(inc.reduce((a, b) => a + b * b, 0) / Math.max(1, inc.length)) || 1;
+  const sd =
+    Math.sqrt(inc.reduce((a, b) => a + b * b, 0) / Math.max(1, inc.length)) || 1;
 
-  const slope = smooth.length > 10
-    ? (smooth[smooth.length - 1] - smooth[smooth.length - 11]) / 10 / sd
-    : 0;
+  const slope =
+    smooth.length > 10
+      ? (smooth[smooth.length - 1] - smooth[smooth.length - 11]) / 10 / sd
+      : 0;
 
-  const momentum = 0.5 + (1 / (1 + Math.exp(-slope * 2)) - 0.5) * 0.5;
+  const momentum =
+    0.5 + (1 / (1 + Math.exp(-slope * 2)) - 0.5) * 0.5;
 
-  // Model rise/fall probabilities retain tie probability.
+  // Rise/Fall probabilities account for ties (neither side wins on a tie).
   const pRise =
     0.45 * empirical +
     0.35 * markovRise * nonTie +
@@ -258,7 +283,7 @@ function riseFallModel(quotes: number[], k: number) {
   };
 }
 
-/** Confidence is deliberately conservative because overlapping outcomes are dependent. */
+/** Conservative signal grading. Overlapping outcomes are not independent. */
 function gradeSignal(z: number, edge: number): Signal {
   if (edge <= 0 || z < 1.5) return "none";
   if (z >= 4) return "strong";
@@ -266,21 +291,23 @@ function gradeSignal(z: number, edge: number): Signal {
   return "weak";
 }
 
-type BTResult = { rate: number; n: number; baseline: number };
+type BTResult = {
+  rate: number;
+  n: number;
+  baseline: number;
+};
 
 /**
  * Walk-forward backtest.
- * Each forecast uses only the prefix available before its settlement.
- * This avoids using the final sample to choose historical predictions.
+ * Each historical prediction uses only data before that prediction.
  */
-function walkForwardBacktest(
-  input: AnalysisInput,
-  barrier: number,
-): BTResult {
+function walkForwardBacktest(input: AnalysisInput, barrier: number): BTResult {
   const { digits, quotes, contract, duration } = input;
   const end = digits.length - duration;
 
-  if (end <= MIN_TRAIN) return { rate: 0, n: 0, baseline: 0 };
+  if (end <= MIN_TRAIN) {
+    return { rate: 0, n: 0, baseline: 0 };
+  }
 
   const start = Math.max(MIN_TRAIN, end - BT_LIMIT);
   let hits = 0;
@@ -298,6 +325,7 @@ function walkForwardBacktest(
     if (contract === "matches_differs") {
       const hi = argmax(forecast);
       const lo = argmin(forecast);
+
       const matchEdge = forecast[hi] - 0.1;
       const differsEdge = 0.1 - forecast[lo];
 
@@ -309,28 +337,46 @@ function walkForwardBacktest(
         fairBaseline = 0.9;
       }
     } else if (contract === "even_odd") {
-      const even = forecast.filter((_, d) => d % 2 === 0).reduce((a, b) => a + b, 0);
+      const even = forecast
+        .filter((_, d) => d % 2 === 0)
+        .reduce((a, b) => a + b, 0);
+
       const pickEven = even >= 0.5;
       predictedWin = (outcome % 2 === 0) === pickEven;
       fairBaseline = 0.5;
     } else if (contract === "over_under") {
-      const over = forecast.filter((_, d) => d > barrier).reduce((a, b) => a + b, 0);
-      const under = forecast.filter((_, d) => d < barrier).reduce((a, b) => a + b, 0);
+      const over = forecast
+        .filter((_, d) => d > barrier)
+        .reduce((a, b) => a + b, 0);
+
+      const under = forecast
+        .filter((_, d) => d < barrier)
+        .reduce((a, b) => a + b, 0);
+
       const overBase = (9 - barrier) / 10;
       const underBase = barrier / 10;
       const canOver = barrier <= 8;
       const canUnder = barrier >= 1;
-      const pickOver = canOver && (!canUnder || over - overBase >= under - underBase);
+
+      const pickOver =
+        canOver && (!canUnder || over - overBase >= under - underBase);
 
       predictedWin = pickOver ? outcome > barrier : outcome < barrier;
       fairBaseline = pickOver ? overBase : underBase;
     } else {
+      // Avoid invalid quote access if quote history is shorter than digit history.
+      if (i + duration >= quotes.length) continue;
+
       const rf = riseFallModel(quotes.slice(0, i + 1), duration);
       const pickRise = rf.pRise >= rf.pFall;
-      const exitQuote = quotes[i + duration];
-      const entryQuote = quotes[i];
 
-      predictedWin = pickRise ? exitQuote > entryQuote : exitQuote < entryQuote;
+      const entryQuote = quotes[i];
+      const exitQuote = quotes[i + duration];
+
+      predictedWin = pickRise
+        ? exitQuote > entryQuote
+        : exitQuote < entryQuote;
+
       fairBaseline = 0.5 * (1 - rf.tieRate);
     }
 
@@ -348,16 +394,23 @@ function walkForwardBacktest(
 
 export function analyze(input: AnalysisInput): AnalysisResult {
   const t0 = performance.now();
+
   const { digits, quotes, contract, duration, symbol } = input;
   const barrier = Math.min(9, Math.max(0, input.barrier));
   const n = digits.length;
 
   const freq = new Array(10).fill(0);
-  for (const d of digits) freq[d]++;
+  for (const d of digits) {
+    if (Number.isInteger(d) && d >= 0 && d <= 9) freq[d]++;
+  }
 
   const frequency = freq.map((c) => c / Math.max(1, n));
   const expected = n / 10;
-  const chiStat = freq.reduce((a, c) => a + (c - expected) ** 2 / Math.max(expected, 1e-9), 0);
+
+  const chiStat = freq.reduce(
+    (a, c) => a + (c - expected) ** 2 / Math.max(expected, 1e-9),
+    0,
+  );
 
   const model = digitForecast(digits, duration);
   const { gaussian, pois, markov, distribution } = model;
@@ -372,6 +425,7 @@ export function analyze(input: AnalysisInput): AnalysisResult {
   if (contract === "matches_differs") {
     const hi = predictedDigit;
     const lo = argmin(distribution);
+
     const matchEdge = distribution[hi] - 0.1;
     const differsEdge = 0.1 - distribution[lo];
 
@@ -390,7 +444,9 @@ export function analyze(input: AnalysisInput): AnalysisResult {
       baseline = 0.9;
     }
   } else if (contract === "even_odd") {
-    const even = distribution.filter((_, d) => d % 2 === 0).reduce((a, b) => a + b, 0);
+    const even = distribution
+      .filter((_, d) => d % 2 === 0)
+      .reduce((a, b) => a + b, 0);
 
     sides = [
       { label: "Even", probability: even, baseline: 0.5 },
@@ -398,14 +454,24 @@ export function analyze(input: AnalysisInput): AnalysisResult {
     ];
 
     const isEven = even >= 0.5;
-    recommendation = { side: isEven ? "Even" : "Odd", label: isEven ? "EVEN" : "ODD" };
+
+    recommendation = {
+      side: isEven ? "Even" : "Odd",
+      label: isEven ? "EVEN" : "ODD",
+    };
+
     probability = isEven ? even : 1 - even;
     baseline = 0.5;
   } else if (contract === "over_under") {
-    const over = distribution.filter((_, d) => d > barrier).reduce((a, b) => a + b, 0);
-    const under = distribution.filter((_, d) => d < barrier).reduce((a, b) => a + b, 0);
+    const over = distribution
+      .filter((_, d) => d > barrier)
+      .reduce((a, b) => a + b, 0);
 
-    // Correct fair probabilities for a uniform 0–9 digit.
+    const under = distribution
+      .filter((_, d) => d < barrier)
+      .reduce((a, b) => a + b, 0);
+
+    // Fair probabilities under uniform 0–9 digits.
     const overBase = (9 - barrier) / 10;
     const underBase = barrier / 10;
 
@@ -416,41 +482,53 @@ export function analyze(input: AnalysisInput): AnalysisResult {
 
     const canOver = barrier <= 8;
     const canUnder = barrier >= 1;
-    const pickOver = canOver && (!canUnder || over - overBase >= under - underBase);
+
+    const pickOver =
+      canOver && (!canUnder || over - overBase >= under - underBase);
 
     recommendation = {
       side: pickOver ? "Over" : "Under",
       label: `${pickOver ? "OVER" : "UNDER"} ${barrier}`,
       barrier,
     };
+
     probability = pickOver ? over : under;
     baseline = pickOver ? overBase : underBase;
   } else {
     const rf = riseFallModel(quotes, duration);
     const isRise = rf.pRise >= rf.pFall;
 
-    const fairRiseFallBaseline = 0.5 * (1 - rf.tieRate);
+    // Fair Rise/Fall probabilities allow for ties (neither side wins).
+    const fairBaseline = 0.5 * (1 - rf.tieRate);
 
     sides = [
-      { label: "Rise", probability: rf.pRise, baseline: fairRiseFallBaseline },
-      { label: "Fall", probability: rf.pFall, baseline: fairRiseFallBaseline },
+      { label: "Rise", probability: rf.pRise, baseline: fairBaseline },
+      { label: "Fall", probability: rf.pFall, baseline: fairBaseline },
     ];
 
-    recommendation = { side: isRise ? "Rise" : "Fall", label: isRise ? "RISE" : "FALL" };
-    probability = isRise ? rf.pRise : rf.pFall;
-    baseline = fairRiseFallBaseline;
+    recommendation = {
+      side: isRise ? "Rise" : "Fall",
+      label: isRise ? "RISE" : "FALL",
+    };
 
-    riseFall = { empirical: rf.empirical, markov: rf.markov, momentum: rf.momentum };
+    probability = isRise ? rf.pRise : rf.pFall;
+    baseline = fairBaseline;
+
+    riseFall = {
+      empirical: rf.empirical,
+      markov: rf.markov,
+      momentum: rf.momentum,
+    };
   }
 
-  // Walk-forward test: no historical forecast is selected using the full sample.
+  // Genuine walk-forward historical testing.
   const bt = walkForwardBacktest(input, barrier);
 
-  // Overlapping duration outcomes are correlated; reduce the effective sample
-  // size before calculating a diagnostic z-score.
+  // Adjust effective sample size for overlapping duration outcomes.
   const effectiveN = Math.max(1, Math.floor(bt.n / Math.max(1, duration)));
   const btBaseline = bt.baseline || baseline;
   const se = Math.sqrt((btBaseline * (1 - btBaseline)) / effectiveN);
+
   const z = bt.n ? (bt.rate - btBaseline) / (se || 1) : 0;
   const edge = probability - baseline;
 
@@ -492,15 +570,23 @@ export function settle(
 
   switch (result.contract) {
     case "matches_differs":
-      return r.side === "Matches" ? exitDigit === r.digit : exitDigit !== r.digit;
+      return r.side === "Matches"
+        ? exitDigit === r.digit
+        : exitDigit !== r.digit;
 
     case "even_odd":
-      return r.side === "Even" ? exitDigit % 2 === 0 : exitDigit % 2 === 1;
+      return r.side === "Even"
+        ? exitDigit % 2 === 0
+        : exitDigit % 2 === 1;
 
     case "over_under":
-      return r.side === "Over" ? exitDigit > result.barrier : exitDigit < result.barrier;
+      return r.side === "Over"
+        ? exitDigit > result.barrier
+        : exitDigit < result.barrier;
 
     case "rise_fall":
-      return r.side === "Rise" ? exitQuote > entryQuote : exitQuote < entryQuote;
+      return r.side === "Rise"
+        ? exitQuote > entryQuote
+        : exitQuote < entryQuote;
   }
 }

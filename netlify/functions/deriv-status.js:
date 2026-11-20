@@ -1,0 +1,31 @@
+
+export default async () => {
+  const token = process.env.DERIV_API_TOKEN;
+
+  if (!token) {
+    return new Response(
+      JSON.stringify({
+        connected: false,
+        error: "Deriv token is not configured"
+      }),
+      {
+        status: 500,
+        headers: { "Content-Type": "application/json" }
+      }
+    );
+  }
+
+  // Token presence only — actual Deriv authentication
+  // verification will be implemented using the correct
+  // API authentication flow for your token type.
+  return new Response(
+    JSON.stringify({
+      configured: true,
+      message: "Deriv token is configured on the server"
+    }),
+    {
+      status: 200,
+      headers: { "Content-Type": "application/json" }
+    }
+  );
+};

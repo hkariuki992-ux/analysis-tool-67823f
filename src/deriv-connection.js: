@@ -1,0 +1,40 @@
+
+const DERIV_PUBLIC_WS =
+  "wss://api.derivws.com/trading/v1/options/ws/public";
+
+export function connectDerivMarket(symbol = "R_100", onTick, onStatus) {
+  const socket = new WebSocket(DERIV_PUBLIC_WS);
+
+  socket.onopen = () => {
+    onStatus?.("connected");
+
+    // Subscribe to live market ticks
+    socket.send(JSON.stringify({
+      ticks: symbol,
+      subscribe: 1
+    }));
+  };
+
+  socket.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+
+    if (data.error) {
+      onStatus?.("error");
+      console.error("Deriv API error:", data.error.message);
+      return;
+    }
+
+    if (data.tick) {
+      onTick?.({
+        symbol: data.tick.symbol,
+        price: data.tick.quote,
+        epoch: data.tick.epoch
+      });
+    }
+  };
+
+  socket.onerror = () => onStatus?.("error");
+  socket.onclose = () => onStatus?.("disconnected");
+
+  return () => socket.close();
+}

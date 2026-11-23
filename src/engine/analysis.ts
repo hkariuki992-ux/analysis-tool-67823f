@@ -125,9 +125,8 @@ function gaussianFilter(digits: number[]): number[] {
   const alpha = 20;
 
   
-return acc.map((a) => (a + alpha * 0.1) / (total + alpha));
 
-}
+return acc.map((a) => (a + alpha * 0.1) / (total + alpha));
 
 /* ------------------------------------------------------------------ */
 /* Poisson model                                                        */
